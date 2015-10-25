@@ -12,8 +12,9 @@ immutable Unum
 
     Unum(s, e, f, u, esm1, fsm1, bias) = new(s, e, f, u, esm1, fsm1, esm1+1, fsm1+1, (1<<bias)-1)
 
-    Unum(s, e, f, u, esm1, fsm1) = new(s, e, f, u, esm1, fsm1, esm1+1, fsm1+1, esm1)
 end
+
+Unum(s, e, f, u, esm1, fsm1) = Unum(s, e, f, u, esm1, fsm1, esm1)  # bias is esm1
 
 Base.sign(u::Unum) = u.s == 0 ? +1 : -1
 
