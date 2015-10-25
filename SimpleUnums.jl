@@ -12,7 +12,7 @@ immutable Unum
 
     Unum(s, e, f, u, esm1, fsm1, bias) = new(s, e, f, u, esm1, fsm1, esm1+1, fsm1+1, (1<<bias)-1)
 
-    Unum(s, e, f, u, esm1, fsm1) = new(s, e, f, u, esm1, fsm1, esm1+1, fsm1+1, esm1+1)
+    Unum(s, e, f, u, esm1, fsm1) = new(s, e, f, u, esm1, fsm1, esm1+1, fsm1+1, esm1)
 end
 
 Base.sign(u::Unum) = u.s == 0 ? +1 : -1
@@ -38,27 +38,43 @@ end
 Base.convert(::Type{Float64}, u::Unum) = Float64(u)
 
 
-function get_all_unums(esizesize, fsizesize)
+function all_unums(esizesize, fsizesize)
 
     es = 1 << esizesize
     fs = 1 << fsizesize
 
-    @show es, fs
+    #@show es, fs
 
     unums = vec([Unum(0, e, f, 0, es-1, fs-1) for e=0:2^es-1, f=0:2^fs-1])
 
     nums = map(Float64, unums)
     permutation = sortperm(nums)
 
-    @show permutation
-
     unums = unums[permutation]
     nums = nums[permutation]
 
-
-    #nums_unique = unique(nums)
-
-    #@show "Numbers of unums: ", length(nums_unique), length(nums)
-
     unums, nums
+end
+
+function extract_parts(x::Float64)
+    e = floor(log2(x))
+    y = x/ 2^e
+    m = Int((y-1) * 2^52)
+    s = copysign(1, x)
+
+    e, y, m, s
+end
+
+function inrange(x::Integer, sizesize)
+    # 0 exponent has a special meaning
+    bias = 2^(sizesize-1) - 1
+    max_value = 2^sizesize-1
+    min_value = max_value - bias
+    max_value -= bias
+
+
+end
+
+function representation(x::Float64, esizesize, fsizesize)
+    e, y, m, s = extract_parts(x)
 end
