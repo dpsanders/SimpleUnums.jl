@@ -39,12 +39,28 @@ end
 Base.convert(::Type{Float64}, u::Unum) = Float64(u)
 
 
-function all_unums(esizesize, fsizesize)
+#all_unums(esizesize, fsizesize) = all_unums(esizesize, fsizesize, esizesize-1)
+
+function all_unums(esizesize, fsizesize, bias)
 
     es = 1 << esizesize
     fs = 1 << fsizesize
 
-    #@show es, fs
+    unums = vec([Unum(0, e, f, 0, es-1, fs-1, bias) for e=0:2^es-1, f=0:2^fs-1])
+
+    nums = map(Float64, unums)
+    permutation = sortperm(nums)
+
+    unums = unums[permutation]
+    nums = nums[permutation]
+
+    unums, nums
+end
+
+function all_unums(esizesize, fsizesize)
+
+    es = 1 << esizesize
+    fs = 1 << fsizesize
 
     unums = vec([Unum(0, e, f, 0, es-1, fs-1) for e=0:2^es-1, f=0:2^fs-1])
 
