@@ -1,5 +1,6 @@
 import Base:
-    nextfloat, repr, show
+    repr, show,
+    prevfloat, nextfloat
 
 
 """Object representing a unum"""
@@ -211,7 +212,29 @@ end
 
 function nextfloat(u::Unum)
     # NEEDS IMPROVING!
-    u = Unum(u.s, u.e, u.f+1, u.u, u.esm1, u.fsm1)
+
+    if u.u == 0
+        return Unum(u.s, u.e, u.f, 1, u.esm1, u.fsm1)
+    end
+
+    new_f = u.f + 1
+    # WHAT HAPPENS WITH FS?
+
+    new_e = u.e
+    new_esm1 = u.esm1
+
+    if new_f == 2^(u.fs)
+        new_f = 0
+        new_e += 1
+
+        if new_e > 2^u.es - 1
+            new_esm1 += 1
+            # CHECK FOR OVERFLOW
+        end
+
+    end
+
+    Unum(u.s, new_e, new_f, 0, new_esm1, u.fsm1)
 end
 
 function repr(u::Unum)
@@ -224,10 +247,10 @@ function show(io::IO, u::Unum)
 
     print(io, repr(u), "\n")
 
-    print_with_color(:red, io, "s: ", bits(u.s, 1))
-    print_with_color(:blue, io, "; e: ", bits(u.e, u.esm1+1))
-    print_with_color(:black, io, "; f: ", bits(u.f, u.fsm1+1))
-    print_with_color(:magenta, io, "; u: ", bits(u.u, 1))
+    print_with_color(:red, io, "s: ", bits(u.s, 1), "; ")
+    print_with_color(:blue, io, "e: ", bits(u.e, u.esm1+1), "; ")
+    print_with_color(:black, io, "f: ", bits(u.f, u.fsm1+1), "; ")
+    print_with_color(:magenta, io, "u: ", bits(u.u, 1))
     print(io, "\n")
 
     print(io, "value: ", Float64(u))
