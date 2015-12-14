@@ -1,7 +1,14 @@
 import Base:
-    repr, show,
+    sign, repr, show,
     prevfloat, nextfloat
 
+const global esizesize = 2
+const global fsizesize = 2
+
+function set_environment(ess, fss)
+    global esizesize = ess
+    global fsizesize = fss
+end
 
 """Object representing a unum"""
 immutable Unum
@@ -23,7 +30,7 @@ end
 
 Unum(s, e, f, u, esm1, fsm1) = Unum(s, e, f, u, esm1, fsm1, esm1)  # standard bias is esm1
 
-Base.sign(u::Unum) = u.s == 0 ? +1 : -1
+sign(u::Unum) = u.s == 0 ? +1 : -1
 
 esizesize,fsizesize = 2, 2  # utag = [esizesize, fsizesize]
 
@@ -37,10 +44,10 @@ function call(::Type{Float64}, u::Unum)
 
     elseif u.e == 1<<u.es - 1 && u.f == 1<<u.fs - 1 && u.es == (1<<esizesize) && u.fs == (1<<fsizesize)
         # not efficient!
-        sign(u) * Inf
+        copysign(Inf, u)
 
     else
-        sign(u) * 2.0^(u.e - u.bias) * (1.0 + u.f/denominator)
+        copysign(2.0^(u.e - u.bias) * (1.0 + u.f/denominator), sign(u))
     end
 
 end
@@ -86,31 +93,23 @@ end
 # last n bits
 Base.bits(x, n) = bits(x)[end-n+1:end]
 
+doc"""Extract the parts of the Float64 x.
+Returns the sign, exponent and fractional part
+(mantissa or significand).
+"""
 function extract_parts(x::Float64)
-    e = floor(log2(x))
-    y = x / 2^e
-    m = Int64( (y - 1) * 2^52 )
+
     s = Int(signbit(x))
+    x = copysign(x, 1)  # make positive
 
-    e, y, m, s
+    e = floor(log2(x))
+
+    y = x / 2^e
+    f = Int64( (y - 1) * 2^52 )
+
+    s, e, f #y, m, s
 end
 
-# function inrange(x::Integer, sizesize)
-#     # 0 exponent has a special meaning
-#     bias = 2^(sizesize-1) - 1
-#     max_exponent = 2^sizesize
-#     min_exponent = 0
-#
-#     min_exponent = max_exponent - bias
-#     max_exponent -= bias
-#
-#     max_fractional = 2^sizesize - 1
-#
-# end
-
-function representation(x::Float64, esizesize, fsizesize)
-    e, y, m, s = extract_parts(x)
-end
 
 "Minimal number of bits required to represent the integer `x`"
 bits_to_represent(x::Integer) = ceil(Int, log2(x))
@@ -133,7 +132,7 @@ Note that *any* `Float64` may be represented via a (possibly inexact) Unum in an
 
 Exponent=0 is special.
 """
-function unum_representation(x::Float64, esizesize, fsizesize)
+function unum_representation(x::Float64, ess=esizesize, fss=fsizesize)
 
     # special cases:
     if isinf(x)
@@ -143,15 +142,17 @@ function unum_representation(x::Float64, esizesize, fsizesize)
         # NaN
     end
 
-    e, y, m, s = extract_parts(x)
-    #@show e, y, m, s
+    s, e, f = extract_parts(x)
+    #@show s, e, f
 
 
-    e_bits = ceil(Int, log2(abs(e))) + 1
-    f_bits = 52 - trailing_zeros(m) #significand_bits(x)
+    e_bits = ceil(Int, log2(abs(e)+1)) + 1
+    f_bits = 52 - trailing_zeros(f) #significand_bits(x)
 
+    bias = 2^(e_bits - 1) - 1
+    e += bias
 
-    max_exponent_size = 2^esizesize
+    max_exponent_size = 2^ess
     bias = 2^(max_exponent_size-1)  # largest bias
 
     min_exponent = 0
@@ -177,20 +178,20 @@ function unum_representation(x::Float64, esizesize, fsizesize)
     # if everything OK:
 
     ubit = 0
-    if f_bits > fsizesize
+    if f_bits > 2^fss
         ubit = 1
-        f_bits = fsizesize
+        f_bits = 2^fss
     end
 
     #@show ubit, e_bits, f_bits
 
     #m = m / 2^(52-f_bits)
-    m = m >> (52-f_bits)
+    f = f >> (52 - f_bits)
 
-    Unum(s, e, m, ubit, e_bits-1, f_bits-1)
-
-
+    Unum(s, e, f, ubit, e_bits-1, f_bits-1)
 end
+
+unum_representation(x::Integer) = unum_representation(Float64(x))
 
 function special_values(esizesize, fsizesize)
 
@@ -213,28 +214,47 @@ end
 function nextfloat(u::Unum)
     # NEEDS IMPROVING!
 
-    if u.u == 0
+    if u.u == 0  # u is exact; return the next open interval
         return Unum(u.s, u.e, u.f, 1, u.esm1, u.fsm1)
     end
 
-    new_f = u.f + 1
-    # WHAT HAPPENS WITH FS?
-
+    # u.u is 1, so move to next representable float
     new_e = u.e
-    new_esm1 = u.esm1
+    new_es = u.es
+    new_fs = u.fs
 
-    if new_f == 2^(u.fs)
-        new_f = 0
-        new_e += 1
+    #new_f = u.f / (2^u.fs) * 2^fsizesize
+    new_fs = 2^fsizesize
+    new_f = u.f * 2^(new_fs - u.fs)
+    new_f += 1
 
-        if new_e > 2^u.es - 1
-            new_esm1 += 1
-            # CHECK FOR OVERFLOW
-        end
+    #@show new_f
 
+
+    while (new_f % 2) == 0  # if divisible by 2 #  new_f & 1
+        new_f >>= 1
+        new_fs -= 1
     end
 
-    Unum(u.s, new_e, new_f, 0, new_esm1, u.fsm1)
+    if new_fs > 2^fsizesize
+        new_f = 0
+        new_e += 1
+        new_fs = 1
+    end
+
+    # else
+    #     new_fs += 1
+    #     new_f += 1  # changed number of bits
+    # end
+
+
+    if new_e == 2^u.es
+        new_es += 1
+        # CHECK FOR OVERFLOW
+    end
+
+
+    Unum(u.s, new_e, new_f, 0, new_es-1, new_fs-1)
 end
 
 function repr(u::Unum)
@@ -250,12 +270,38 @@ function show(io::IO, u::Unum)
     print_with_color(:red, io, "s: ", bits(u.s, 1), "; ")
     print_with_color(:blue, io, "e: ", bits(u.e, u.esm1+1), "; ")
     print_with_color(:black, io, "f: ", bits(u.f, u.fsm1+1), "; ")
-    print_with_color(:magenta, io, "u: ", bits(u.u, 1))
-    print(io, "\n")
+    print_with_color(:magenta, io, "u: ", bits(u.u, 1), "; ")
+    print_with_color(:green, io, "esm1: ", bits(u.esm1, esizesize), "; ")
+    print_with_color(:grey, io, "fsm1: ", bits(u.fsm1, fsizesize))
 
-    print(io, "value: ", Float64(u))
+    println(io)
+
+    print(io, "  ", Float64(u))
+
     if u.u == 1
-        print(io, "...")
+        println(io, "...")
+    else
+        println(io, "↓")
     end
 
+    if u.u == 1
+        u_next = nextfloat(u)
+        f1 = Float64(u)
+        f2 = Float64(u_next)
+
+        println(io, "  (", f1, ", ", f2, ")")
+
+        mid = (f1 + f2) / 2.
+        rad = f2 - mid
+
+        print(io, "  ", mid, " ± ", rad)
+    end
+
+
 end
+
+#=
+TODO:
+- Output with + sign to denote that more digits available (use big)
+- Interval output for inexact
+=#
