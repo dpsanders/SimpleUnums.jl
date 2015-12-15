@@ -32,8 +32,6 @@ Unum(s, e, f, u, esm1, fsm1) = Unum(s, e, f, u, esm1, fsm1, esm1)  # standard bi
 
 sign(u::Unum) = u.s == 0 ? +1 : -1
 
-esizesize,fsizesize = 2, 2  # utag = [esizesize, fsizesize]
-
 "Convert Unum to Float64"
 # Float64(u)
 function call(::Type{Float64}, u::Unum)
@@ -102,10 +100,19 @@ function extract_parts(x::Float64)
     s = Int(signbit(x))
     x = copysign(x, 1)  # make positive
 
-    e = floor(log2(x))
+    if x == 0.0
+        return s, 0, 0
+    end
+
+    e = floor(Int, log2(x))
 
     y = x / 2^e
-    f = Int64( (y - 1) * 2^52 )
+
+    #if e == 0
+#        f = Int64(y * 2^52)
+#    else
+        f = Int64( (y - 1) * 2^52 )
+#    end
 
     s, e, f #y, m, s
 end
@@ -132,7 +139,7 @@ Note that *any* `Float64` may be represented via a (possibly inexact) Unum in an
 
 Exponent=0 is special.
 """
-function unum_representation(x::Float64, ess=esizesize, fss=fsizesize)
+function unum_representation(x::Float64, ess=esizesize, fss=fsizesize; debug=false)
 
     # special cases:
     if isinf(x)
@@ -145,9 +152,15 @@ function unum_representation(x::Float64, ess=esizesize, fss=fsizesize)
     s, e, f = extract_parts(x)
     #@show s, e, f
 
-
     e_bits = ceil(Int, log2(abs(e)+1)) + 1
     f_bits = 52 - trailing_zeros(f) #significand_bits(x)
+    if f_bits < 0
+        f_bits = 1
+    end
+
+    if debug
+        @show e_bits, f_bits
+    end
 
     bias = 2^(e_bits - 1) - 1
     e += bias
@@ -192,6 +205,8 @@ function unum_representation(x::Float64, ess=esizesize, fss=fsizesize)
 end
 
 unum_representation(x::Integer) = unum_representation(Float64(x))
+
+Unum(x) = unum_representation(x)
 
 function special_values(esizesize, fsizesize)
 
