@@ -2,12 +2,20 @@ import Base:
     sign, repr, show,
     prevfloat, nextfloat
 
-const global esizesize = 2
-const global fsizesize = 2
+type UnumEnvironment
+    esizesize::Int
+    fsizesize::Int
+end
+
+const unum_environment = UnumEnvironment(2, 2)
 
 function set_environment(ess, fss)
-    global esizesize = ess
-    global fsizesize = fss
+    unum_environment.esizesize = ess
+    unum_environment.fsizesize = fss
+end
+
+function get_environment()
+    unum_environment.esizesize, unum_environment.fsizesize
 end
 
 """Object representing a unum"""
@@ -108,7 +116,9 @@ function extract_parts(x::Float64)
 
     y = x / 2^e
 
-    #if e == 0
+    if e == 0
+        # subnormal -- 1.0 is subnormal!
+    end
 #        f = Int64(y * 2^52)
 #    else
         f = Int64( (y - 1) * 2^52 )
@@ -139,8 +149,13 @@ Note that *any* `Float64` may be represented via a (possibly inexact) Unum in an
 
 Exponent=0 is special.
 """
-function unum_representation(x::Float64, ess=esizesize, fss=fsizesize; debug=false)
+function unum_representation(x::Float64; debug=false)
 
+    esizesize, fsizesize = get_environment()
+
+    if debug
+        @show esizesize, fsizesize
+    end
     # special cases:
     if isinf(x)
         # plus and minus infinity
@@ -165,7 +180,7 @@ function unum_representation(x::Float64, ess=esizesize, fss=fsizesize; debug=fal
     bias = 2^(e_bits - 1) - 1
     e += bias
 
-    max_exponent_size = 2^ess
+    max_exponent_size = 2^esizesize
     bias = 2^(max_exponent_size-1)  # largest bias
 
     min_exponent = 0
@@ -191,12 +206,14 @@ function unum_representation(x::Float64, ess=esizesize, fss=fsizesize; debug=fal
     # if everything OK:
 
     ubit = 0
-    if f_bits > 2^fss
+    if f_bits > 2^fsizesize
         ubit = 1
-        f_bits = 2^fss
+        f_bits = 2^fsizesize
     end
 
-    #@show ubit, e_bits, f_bits
+    if debug
+        @show ubit, e_bits, f_bits
+    end
 
     #m = m / 2^(52-f_bits)
     f = f >> (52 - f_bits)
@@ -229,6 +246,9 @@ end
 function nextfloat(u::Unum)
     # NEEDS IMPROVING!
 
+    esizesize, fsizesize = get_environment()
+
+
     if u.u == 0  # u is exact; return the next open interval
         return Unum(u.s, u.e, u.f, 1, u.esm1, u.fsm1)
     end
@@ -236,10 +256,9 @@ function nextfloat(u::Unum)
     # u.u is 1, so move to next representable float
     new_e = u.e
     new_es = u.es
-    new_fs = u.fs
 
-    #new_f = u.f / (2^u.fs) * 2^fsizesize
     new_fs = 2^fsizesize
+
     new_f = u.f * 2^(new_fs - u.fs)
     new_f += 1
 
@@ -249,9 +268,14 @@ function nextfloat(u::Unum)
     while (new_f % 2) == 0  # if divisible by 2 #  new_f & 1
         new_f >>= 1
         new_fs -= 1
+
+        if new_fs == 0
+            new_fs = 1
+        end
     end
 
     if new_fs > 2^fsizesize
+
         new_f = 0
         new_e += 1
         new_fs = 1
@@ -278,6 +302,9 @@ function repr(u::Unum)
 end
 
 function show(io::IO, u::Unum)
+
+    esizesize, fsizesize = get_environment()
+
     space = " "
 
     print(io, repr(u), "\n")
