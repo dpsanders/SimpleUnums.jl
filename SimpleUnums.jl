@@ -43,6 +43,9 @@ sign(u::Unum) = u.s == 0 ? +1 : -1
 "Convert Unum to Float64"
 # Float64(u)
 function call(::Type{Float64}, u::Unum)
+
+    esizesize, fsizesize = get_environment()
+
     denominator = 1 << u.fs
 
     if u.e == 0
@@ -50,7 +53,7 @@ function call(::Type{Float64}, u::Unum)
 
     elseif u.e == 1<<u.es - 1 && u.f == 1<<u.fs - 1 && u.es == (1<<esizesize) && u.fs == (1<<fsizesize)
         # not efficient!
-        copysign(Inf, u)
+        copysign(Inf, sign(u))
 
     else
         copysign(2.0^(u.e - u.bias) * (1.0 + u.f/denominator), sign(u))
@@ -341,6 +344,8 @@ function show(io::IO, u::Unum)
 
 
 end
+
+include("unum_maths.jl")
 
 #=
 TODO:
